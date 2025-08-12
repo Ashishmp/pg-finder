@@ -85,6 +85,5 @@ public class AuditModel {
     public void preUpdate() {
         updatedAt = OffsetDateTime.now();
     }
-	public LocalDateTime getCreatedAt() { return createdAt; }
-	public LocalDateTime getUpdatedAt() { return updatedAt; }
+
 }
