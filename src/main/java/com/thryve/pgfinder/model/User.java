@@ -10,6 +10,8 @@ import lombok.*;
 @AllArgsConstructor
 public class User {
 
+
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private String userId;
