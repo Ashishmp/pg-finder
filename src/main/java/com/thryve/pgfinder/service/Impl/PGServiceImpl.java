@@ -59,104 +59,75 @@ public class PGServiceImpl implements PGService {
     
     @Override
     @Transactional
-    public APIResponse createPg(CreatePgRequest request) {
-        APIResponse response = new APIResponse();
+	public APIResponse createPg(CreatePgRequest request) {
+		APIResponse response = new APIResponse();
 
-        // Validation
-        Map<String, Object> fieldsMap = new HashMap<>();
-        for (Field field : CreatePgRequest.class.getDeclaredFields()) {
-            field.setAccessible(true);
-            try {
-                fieldsMap.put(field.getName(), field.get(request));
-            } catch (IllegalAccessException e) {
-                // Handle reflection exception
-                response.setMessage("Failed to access request fields");
-                response.setStatus("error");
-                return response;
-            }
-        }
-
-        Map<String, Object> validationResponse = utilityValidation.validate(fieldsMap);
-        if (!(Boolean.TRUE.equals(validationResponse.get("status")))) {
-            String validationMessage = validationResponse.get("message") != null
-                    ? validationResponse.get("message").toString()
-                    : "Validation failed";
-            response.setMessage(validationMessage);
-            response.setStatus("error");
-            return response;
-        }
-
-        // Check for existing PG
-//        String name = request.getName().trim().toLowerCase();
-//        // TODO: update this to actual address from request
-//        String address = "test"; 
-//        Optional<PG> existingPg = pgRepository.findByNameAndAddress(name, address);
-//        if (existingPg.isPresent()) {
-//            response.setMessage("This PG is already listed with the same name and address.");
-//            response.setStatus("error");
-//            return response;
-//        }
-
-        // Resolve owner
-        Owner owner = resolveOwner(request.getOwnerId());
-
-        // Map request to entity
-        PG pg = pgMapper.toEntity(request);
-
-		System.out.println("=== STEP 1: After Mapper ===");
-		System.out.println("Audit object: " + pg.getAudit());
-		if (pg.getAudit() != null) {
-		    System.out.println("Audit.deleted = " + pg.getAudit().isDeleted());
-		} else {
-		    System.out.println("Audit is NULL!");
+		// Validation
+		Map<String, Object> fieldsMap = new HashMap<>();
+		for (Field field : CreatePgRequest.class.getDeclaredFields()) {
+			field.setAccessible(true);
+			try {
+				fieldsMap.put(field.getName(), field.get(request));
+			} catch (IllegalAccessException e) {
+				// Handle reflection exception
+				response.setMessage("Failed to access request fields");
+				response.setStatus("error");
+				return response;
+			}
 		}
-        pg.setOwner(owner);
 
-       
-        if (pg.getAudit() == null) pg.setAudit(new AuditModel());
-       
-        pg.getAudit().setCreatedAt(OffsetDateTime.now());
-        pg.getAudit().setDeleted(false);
+		Map<String, Object> validationResponse = utilityValidation.validate(fieldsMap);
+		if (!(Boolean.TRUE.equals(validationResponse.get("status")))) {
+			String validationMessage = validationResponse.get("message") != null
+					? validationResponse.get("message").toString()
+					: "Validation failed";
+			response.setMessage(validationMessage);
+			response.setStatus("error");
+			return response;
+		}
 
-        // Save rooms if present
-        if (request.getRooms() != null) {
-            request.getRooms().forEach(cr -> {
-                Room room = pgMapper.toRoom(cr);
-                room.setPg(pg);
-                
-                if (room.getAudit() == null) {
-                    room.setAudit(new AuditModel());
-                }
-                room.getAudit().setCreatedAt(OffsetDateTime.now());
-                room.getAudit().setDeleted(false);
-                
-                System.out.println("=== Room Audit Set ===");
-                System.out.println("Room audit: " + room.getAudit());
-                System.out.println("Room deleted: " + room.getAudit().isDeleted());
-                
-                
-                pg.getRooms().add(room);
-            });
-        }
+		// Resolve owner
+		Owner owner = resolveOwner(request.getOwnerId());
 
-        System.out.println("=== STEP 2: Before Repository Save ===");
-        System.out.println("Audit object: " + pg.getAudit());
-        if (pg.getAudit() != null) {
-            System.out.println("Audit.deleted = " + pg.getAudit().isDeleted());
-        } else {
-            System.out.println("Audit is NULL!");
-        }
-        // Save PG entity (transactional)
-        PG saved = pgRepository.save(pg);
+		// Map request to entity
+		PG pg = pgMapper.toEntity(request);
 
-        response.setResult(pgMapper.toDetail(saved));
-        response.setMessage("PG created successfully");
-        response.setStatus("success");
+		if (pg.getAudit() == null) pg.setAudit(new AuditModel());
+		pg.setOwner(owner);
+		pg.getAudit().setCreatedAt(OffsetDateTime.now());
+		pg.getAudit().setDeleted(false);
 
-        return response;
-    }
+		// Step 1: Save PG first (without rooms)
+		List<CreateRoomRequest> roomRequests = request.getRooms();
+		pg.setRooms(new ArrayList<>()); // prevent cascade issues
+		PG savedPG = pgRepository.save(pg);
 
-	
+		// Step 2: Add rooms with PG reference and save them
+		if (roomRequests != null) {
+			for (CreateRoomRequest cr : roomRequests) {
+				Room room = pgMapper.toRoom(cr);
+				room.setPg(savedPG);
+
+				if (room.getAudit() == null) {
+					room.setAudit(new AuditModel());
+				}
+				room.getAudit().setCreatedAt(OffsetDateTime.now());
+				room.getAudit().setDeleted(false);
+
+				roomRepository.save(room);
+				savedPG.getRooms().add(room);
+			}
+		}
+
+		response.setResult(pgMapper.toDetail(savedPG));
+		response.setMessage("PG created successfully");
+		response.setStatus("success");
+
+		return response;
+	}
+
+
+
 	private Owner resolveOwner(String ownerRef) {
         if (ownerRef == null || ownerRef.isBlank()) {
             throw new IllegalArgumentException("ownerId must be provided");
