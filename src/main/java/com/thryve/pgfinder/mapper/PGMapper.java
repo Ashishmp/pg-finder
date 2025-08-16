@@ -55,9 +55,15 @@ public interface PGMapper{
 	    PgSummaryResponse toSummary(PG pg);
 	  
 	    // Pg -> Detail DTO
-	    @Mapping(source = "audit.createdAt", target = "createdAt")
-	    @Mapping(source = "audit.updatedAt", target = "updatedAt")
+//	    @Mapping(source = "audit.createdAt", target = "createdAt")
+//	    @Mapping(source = "audit.updatedAt", target = "updatedAt")
 	    PgDetailResponse toDetail(PG pg);
+	private void setAuditFields(PG pg, PgDetailResponse response) {
+		if (pg.getAudit() != null) {
+			response.setCreatedAt(pg.getAudit().getCreatedAt());
+			response.setUpdatedAt(pg.getAudit().getUpdatedAt());
+		}
+	}
 	    
 	    // Create request -> entity (note: owner / address / other relations should be set in service)
 	    PG toEntity(CreatePgRequest request);
